@@ -154,3 +154,7 @@ npm run build
 ZHONG XIN  
 zhongxin123456@gmail.com  
 https://www.jiqiren.ai
+
+## 致谢
+
+Cowart 的画布能力基于 [tldraw/tldraw](https://github.com/tldraw/tldraw) 实现。

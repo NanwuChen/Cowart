@@ -69,6 +69,7 @@ const AI_IMAGE_HOLDER_DEFAULT_W = 512
 const AI_IMAGE_HOLDER_DEFAULT_H = 683
 const AI_IMAGE_SIZE_MIN = 16
 const AI_IMAGE_SIZE_MAX = 8192
+const SKIPPED_RECORDS_NOTICE_AUTO_HIDE_MS = 5000
 const AI_IMAGE_ASPECT_PRESETS = [
   { id: '1-1', label: '1:1', w: 512, h: 512 },
   { id: '3-2', label: '3:2', w: 768, h: 512 },
@@ -1325,13 +1326,40 @@ export default function App() {
 }
 
 function SkippedRecordsNotice({ records }) {
-  if (!records.length) return null
+  const [isVisible, setIsVisible] = useState(false)
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false)
+  const recordsKey = records
+    .map((record) => `${record.id}:${record.typeName ?? ''}:${record.type ?? ''}:${record.reason}`)
+    .join('\n')
+
+  useEffect(() => {
+    if (!records.length) {
+      setIsVisible(false)
+      setIsDetailsOpen(false)
+      return
+    }
+
+    setIsVisible(true)
+    setIsDetailsOpen(false)
+  }, [records.length, recordsKey])
+
+  useEffect(() => {
+    if (!records.length || !isVisible || isDetailsOpen) return undefined
+
+    const noticeTimer = window.setTimeout(() => {
+      setIsVisible(false)
+    }, SKIPPED_RECORDS_NOTICE_AUTO_HIDE_MS)
+
+    return () => window.clearTimeout(noticeTimer)
+  }, [records.length, recordsKey, isVisible, isDetailsOpen])
+
+  if (!records.length || !isVisible) return null
 
   return (
     <aside className="cowart-skipped-records" aria-live="polite">
       <strong>Skipped {records.length} invalid canvas record{records.length === 1 ? '' : 's'}.</strong>
       <span>Valid content was loaded.</span>
-      <details>
+      <details open={isDetailsOpen} onToggle={(event) => setIsDetailsOpen(event.currentTarget.open)}>
         <summary>Details</summary>
         <ul>
           {records.slice(0, 8).map((record, index) => (

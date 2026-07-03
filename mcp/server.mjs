@@ -242,6 +242,10 @@ function firstSelectedShapeId(selection) {
   return selection?.selectedShapes?.length === 1 ? selection.selectedShapes[0]?.id : null;
 }
 
+function isAiImageHolderShape(shape) {
+  return shape?.typeName === "shape" && shape.meta?.cowartAiImageHolder === true;
+}
+
 function choosePlacement({ store, pageId, parentId, anchorShape, width, height, margin, placement }) {
   const anchorBounds = anchorShape ? pageBoundsForShape(store, anchorShape) : null;
   let x = anchorBounds ? anchorBounds.x + anchorBounds.w + margin : 0;
@@ -328,18 +332,41 @@ async function insertCowartImage(args = {}) {
     Object.values(store).find((record) => record?.typeName === "page")?.id;
   if (!pageId || !store[pageId]) throw new Error("Could not determine target pageId.");
 
-  const parentId = anchorShape?.parentId && store[anchorShape.parentId]?.typeName === "page" ? anchorShape.parentId : pageId;
   const imageSize = await getImageDimensions(sourceImagePath);
   const anchorBounds = anchorShape ? pageBoundsForShape(store, anchorShape) : null;
+  const shouldFillAiImageHolder = args.matchAnchor !== false && isAiImageHolderShape(anchorShape) && anchorBounds;
   const matchAnchor = args.matchAnchor !== false && anchorBounds;
-  const width = finiteNumber(args.displayWidth, matchAnchor ? anchorBounds.w : Math.min(imageSize.width, 512));
-  const height = finiteNumber(
-    args.displayHeight,
-    matchAnchor ? anchorBounds.h : Math.round(width * (imageSize.height / imageSize.width)),
-  );
+  const width = shouldFillAiImageHolder
+    ? anchorBounds.w
+    : finiteNumber(args.displayWidth, matchAnchor ? anchorBounds.w : Math.min(imageSize.width, 512));
+  const height = shouldFillAiImageHolder
+    ? anchorBounds.h
+    : finiteNumber(
+      args.displayHeight,
+      matchAnchor ? anchorBounds.h : Math.round(width * (imageSize.height / imageSize.width)),
+    );
   const margin = Math.max(0, finiteNumber(args.margin, 40));
   const placement = ["right", "left", "below"].includes(args.placement) ? args.placement : "right";
-  const bounds = choosePlacement({ store, pageId, parentId, anchorShape, width, height, margin, placement });
+  let parentId = anchorShape?.parentId && store[anchorShape.parentId] ? anchorShape.parentId : pageId;
+  let rotation = 0;
+  let bounds = null;
+
+  if (shouldFillAiImageHolder && anchorShape.type === "frame") {
+    parentId = anchorShape.id;
+    bounds = { x: 0, y: 0, w: width, h: height };
+  } else if (shouldFillAiImageHolder) {
+    parentId = anchorShape.parentId && store[anchorShape.parentId] ? anchorShape.parentId : pageId;
+    rotation = finiteNumber(anchorShape.rotation, 0);
+    bounds = {
+      x: finiteNumber(anchorShape.x, 0),
+      y: finiteNumber(anchorShape.y, 0),
+      w: width,
+      h: height,
+    };
+  } else {
+    parentId = anchorShape?.parentId && store[anchorShape.parentId]?.typeName === "page" ? anchorShape.parentId : pageId;
+    bounds = choosePlacement({ store, pageId, parentId, anchorShape, width, height, margin, placement });
+  }
 
   const canvasDir = resolveCanvasDir(args);
   const assetsDir = join(canvasDir, "pages", pageDirName(pageId), "assets");
@@ -373,6 +400,9 @@ async function insertCowartImage(args = {}) {
   if (anchorShapeId && !shapeMeta.cowartAnnotationSourceShapeId) {
     shapeMeta.cowartAnnotationSourceShapeId = anchorShapeId;
   }
+  if (shouldFillAiImageHolder && anchorShapeId && !shapeMeta.cowartGeneratedForAiImageHolder) {
+    shapeMeta.cowartGeneratedForAiImageHolder = anchorShapeId;
+  }
   if (nonEmptyString(args.annotationScreenshot) && !shapeMeta.cowartAnnotationScreenshot) {
     shapeMeta.cowartAnnotationScreenshot = nonEmptyString(args.annotationScreenshot);
   }
@@ -380,7 +410,7 @@ async function insertCowartImage(args = {}) {
   const shapeRecord = {
     x: bounds.x,
     y: bounds.y,
-    rotation: 0,
+    rotation,
     isLocked: false,
     opacity: 1,
     meta: shapeMeta,
@@ -688,7 +718,7 @@ function registerCowartImageTools(mcpServer) {
     {
       title: "Insert Cowart Image",
       description:
-        "Copy a local bitmap into a Cowart page-local assets folder, create a tldraw image asset and shape, place it beside an anchor or clear page area, and save the project-backed Cowart canvas.",
+        "Copy a local bitmap into a Cowart page-local assets folder, create a tldraw image asset and shape, fill an AI image holder when one is targeted, otherwise place it beside an anchor or clear page area, and save the project-backed Cowart canvas.",
       inputSchema: {
         imagePath: z.string().trim(),
         projectDir: z.string().trim().optional(),

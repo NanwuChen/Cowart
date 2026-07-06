@@ -1,3 +1,6 @@
+This is a personal customized fork of Cowart for my own Codex workflow experiments.
+Original project: zhongerxin/Cowart.
+
 # Cowart
 
 Cowart 是一个面向 Codex 的原生无限画布 widget 插件。它基于 tldraw 提供可视化画布，用于构思、标注、生成图片和根据标注图迭代图片。画布由 MCP widget 直接打开，数据默认保存到当前用户项目的 `canvas/` 目录，而不是保存到插件仓库里。
